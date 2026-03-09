@@ -4,7 +4,7 @@ const HTML = `
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ricochet</title>
+    <title>Kybu</title>
     <style>
         body { font-family: 'Consolas', monospace; background: #0b0b1a; color: #00ffcc; padding: 20px; display: flex; height: 95vh; margin: 0; gap: 20px; }
         #left-col { width: 35%; display: flex; flex-direction: column; border-right: 1px solid #333; padding-right: 20px; }
@@ -29,7 +29,7 @@ const HTML = `
 <body>
     <div id="left-col">
         <div class="header">
-            <h3>Ricochet Stream</h3>
+            <h3>Kybu Stream</h3>
             <button class="clear" onclick="resetBackend()">Clear Stream</button>
         </div>
         <div id="logs"></div>

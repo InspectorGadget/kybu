@@ -99,8 +99,8 @@ You will see:
 
 ## Stopping Kybu
 
-When you are finished, simply press Ctrl+C in the terminal running Kybu.
-**Note**: Kybu will automatically remove the csm_enabled = true line from your ~/.aws/config file to return your system to its original state.
+When you are finished, simply press Ctrl+C in the terminal running Kybu. <br>
+**Note**: Kybu will automatically remove the `csm_enabled = true` line from your `~/.aws/config` file to return your system to its original state.
 
 ```bash
 Shutting down... Removing CSM flags.

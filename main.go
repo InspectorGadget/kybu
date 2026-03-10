@@ -8,16 +8,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/InspectorGadget/ricochet/config"
-	"github.com/InspectorGadget/ricochet/constants"
-	"github.com/InspectorGadget/ricochet/structs"
-	"github.com/InspectorGadget/ricochet/variables"
+	"github.com/InspectorGadget/kybu/config"
+	"github.com/InspectorGadget/kybu/constants"
+	"github.com/InspectorGadget/kybu/structs"
+	"github.com/InspectorGadget/kybu/variables"
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,7 +30,7 @@ func main() {
 	if err := config.ToggleCSM(true); err != nil {
 		fmt.Printf("Could not update config: %v\n", err)
 	} else {
-		fmt.Println("CSM Enabled globally in '~/.aws/config'")
+		fmt.Println("Kybu: CSM Enabled globally in '~/.aws/config'")
 	}
 
 	// 2. Ensure Cleanup on Exit (Ctrl+C)
@@ -37,15 +38,12 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Println("\nShutting down... Removing CSM flags.")
-
-		// This runs the removal logic
+		fmt.Println("\nShutting down... Restoring AWS config.")
 		config.ToggleCSM(false)
-
 		os.Exit(0)
 	}()
 
-	// Goroutine for listeners
+	// Start Background Workers
 	go udpListener()
 	go packetProcessor()
 
@@ -57,90 +55,139 @@ func main() {
 	r.GET(
 		"/",
 		func(c *gin.Context) {
-			c.Data(
-				http.StatusOK,
-				"text/html; charset=utf-8",
-				[]byte(constants.HTML),
-			)
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(constants.HTML))
 		},
 	)
 	r.GET("/ws", wsHandler)
 
+	fmt.Printf("Kybu Dashboard running at http://localhost:%s\n", *portPtr)
 	r.Run(":" + *portPtr)
 }
 
-// Process packets and update global state
+// packetProcessor handles the forensic scraping and state updates
 func packetProcessor() {
 	for packet := range variables.PacketChan {
 		service := strings.ToLower(packet.Service)
+		region := packet.Region
 		api := packet.Api
 		iamAction := service + ":" + api
-		resource := "*"
 
-		// Apply Mapping
 		if mapped, ok := variables.ApiMapping[iamAction]; ok {
 			iamAction = mapped
 		}
 
-		// Detect Failure
-		isDenied := packet.HttpStatusCode >= 400 || (packet.ErrorCode != "" && strings.Contains(packet.ErrorCode, "Denied"))
-		fullMsg := packet.AwsExceptionMessage + " " + packet.Message
+		fullMsg := fmt.Sprintf("%s %s %s %s",
+			packet.AwsExceptionMessage, packet.Message, packet.ErrorMessage, packet.AwsException)
 
-		// Apply Smart Regex Scraper (Server-Side)
-		if len(fullMsg) > 5 {
-			// Find hidden action
-			if matches := variables.ReAction.FindStringSubmatch(fullMsg); len(matches) > 1 {
-				iamAction = matches[1]
+		var eventResources []string
+
+		// 1. Standard ARN Scraper
+		arnMatches := variables.ReArn.FindAllString(fullMsg, -1)
+		for _, arn := range arnMatches {
+			if !isIdentityArn(arn) {
+				eventResources = append(eventResources, arn)
+			}
+		}
+
+		// 2. Heuristic Scraper (If ARNs failed)
+		if len(eventResources) == 0 {
+			// DynamoDB
+			reTable := regexp.MustCompile(`Table:\s+([a-zA-Z0-9._-]+)`)
+			if match := reTable.FindStringSubmatch(fullMsg); len(match) > 1 {
+				eventResources = append(eventResources, fmt.Sprintf("arn:aws:dynamodb:%s:*:table/%s", region, match[1]))
 			}
 
-			// Find hidden Resources
-			arnMatches := variables.ReArn.FindAllString(fullMsg, -1)
-			for _, arn := range arnMatches {
-				// Filter out identities
-				if !strings.Contains(arn, ":iam::") && !strings.Contains(arn, ":sts::") && !strings.Contains(arn, ":user/") && !strings.Contains(arn, ":role/") {
-					resource = arn
-					break
+			// S3 Improved (Skip "specified", "the", etc.)
+			reS3 := regexp.MustCompile(`(?:s3://|bucket\s+)([a-zA-Z0-9.-]+)`)
+			if match := reS3.FindStringSubmatch(fullMsg); len(match) > 1 {
+				candidate := strings.Trim(match[1], ".")
+				// Filter out common error message noise
+				noise := map[string]bool{"specified": true, "the": true, "does": true, "not": true}
+				if !noise[strings.ToLower(candidate)] {
+					eventResources = append(eventResources, fmt.Sprintf("arn:aws:s3:::%s", candidate))
 				}
 			}
 		}
 
-		// 2. Update State
+		// 3. Update Global State
 		variables.Policy.Lock()
 		if _, exists := variables.Policy.Data[iamAction]; !exists {
 			variables.Policy.Data[iamAction] = make(map[string]bool)
 		}
-		variables.Policy.Data[iamAction][resource] = true
+
+		// --- THE CRITICAL FIX: The Purge ---
+		// If we found a real resource, delete the wildcard for this action
+		if len(eventResources) > 0 {
+			delete(variables.Policy.Data[iamAction], "*")
+		} else if len(variables.Policy.Data[iamAction]) == 0 {
+			// Only add wildcard if we have NO specific resources yet
+			eventResources = append(eventResources, "*")
+		}
+
+		for _, res := range eventResources {
+			finalRes := applyServiceRules(iamAction, res)
+			variables.Policy.Data[iamAction][finalRes] = true
+		}
 		jsonOutput := generateJSON()
 		variables.Policy.Unlock()
 
-		// 3. Create Log HTML (Server renders the HTML fragment)
+		// --- UI Logic ---
+		isDenied := packet.HttpStatusCode >= 400 || (packet.ErrorCode != "" && strings.Contains(packet.ErrorCode, "Denied"))
 		colorClass := ""
-		deniedText := ""
 		if isDenied {
 			colorClass = "denied"
-			deniedText = " (DENIED)"
 		}
 
 		logEntry := fmt.Sprintf(
-			`<div class="entry %s">[%s] <b>%s</b>%s<br><span class="res">%s</span></div>`,
-			colorClass,
-			time.Now().Format("3:04:05 PM"),
-			iamAction,
-			deniedText,
-			resource,
-		)
+			`<div class="entry %s">[%s] <b>%s</b><br><span class="res">%s</span></div>`,
+			colorClass, time.Now().Format("15:04:05"), iamAction, strings.Join(eventResources, ", "))
 
-		// 4. Broadcast to UI
-		broadcast(
-			structs.WSUpdate{
-				LogHTML:    logEntry,
-				PolicyJSON: jsonOutput,
-			},
-		)
+		broadcast(structs.WSUpdate{LogHTML: logEntry, PolicyJSON: jsonOutput})
 	}
 }
 
-// Generate the final Grouped IAM Policy JSON
+// isIdentityArn returns true if the ARN belongs to an IAM principal rather than a resource
+func isIdentityArn(arn string) bool {
+	identityMarkers := []string{":iam::", ":sts::", ":user/", ":role/", "assumed-role/"}
+	for _, marker := range identityMarkers {
+		if strings.Contains(arn, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func applyServiceRules(action string, arn string) string {
+	if !strings.HasPrefix(action, "s3:") || arn == "*" {
+		return arn
+	}
+
+	// List of actions that apply to objects (require /*)
+	objectActions := []string{"GetObject", "PutObject", "DeleteObject", "AbortMultipartUpload"}
+	isObjectAction := false
+	for _, oa := range objectActions {
+		if strings.Contains(action, oa) {
+			isObjectAction = true
+			break
+		}
+	}
+
+	// If it's an object action but looks like a bucket ARN, add /*
+	if isObjectAction && !strings.Contains(arn, "/") {
+		return strings.TrimSuffix(arn, "/") + "/*"
+	}
+
+	// For bucket-level actions (like ListBucket), ensure we DON'T have a / or /*
+	bucketActions := []string{"ListBucket", "GetBucketLocation"}
+	for _, ba := range bucketActions {
+		if strings.Contains(action, ba) {
+			return strings.Split(arn, "/")[0]
+		}
+	}
+
+	return arn
+}
+
 func generateJSON() string {
 	type Statement struct {
 		Sid      string   `json:"Sid"`
@@ -153,7 +200,6 @@ func generateJSON() string {
 		Statement []Statement `json:"Statement"`
 	}
 
-	// Group by Service Prefix
 	groups := make(map[string]*Statement)
 
 	for action, resources := range variables.Policy.Data {
@@ -167,24 +213,22 @@ func generateJSON() string {
 			}
 		}
 
-		groups[prefix].Action = append(groups[prefix].Action, action)
+		if !slices.Contains(groups[prefix].Action, action) {
+			groups[prefix].Action = append(groups[prefix].Action, action)
+		}
 
-		// Add resources (avoid duplicates in slice)
 		for res := range resources {
-			exists := slices.Contains(groups[prefix].Resource, res)
-			if !exists {
+			if !slices.Contains(groups[prefix].Resource, res) {
 				groups[prefix].Resource = append(groups[prefix].Resource, res)
 			}
 		}
 	}
 
-	// Build Final Struct
 	final := Policy{
 		Version:   "2012-10-17",
 		Statement: []Statement{},
 	}
 
-	// Sort Keys for deterministic output
 	var prefixes []string
 	for p := range groups {
 		prefixes = append(prefixes, p)
@@ -228,17 +272,10 @@ func wsHandler(c *gin.Context) {
 
 	variables.ClientsLock.Lock()
 	variables.Clients[conn] = true
-
-	// Send current state immediately upon connection
 	variables.Policy.RLock()
 	currentJSON := generateJSON()
 	variables.Policy.RUnlock()
-	conn.WriteJSON(
-		structs.WSUpdate{
-			LogHTML:    "",
-			PolicyJSON: currentJSON,
-		},
-	)
+	conn.WriteJSON(structs.WSUpdate{LogHTML: "", PolicyJSON: currentJSON})
 	variables.ClientsLock.Unlock()
 
 	defer func() {
@@ -248,26 +285,17 @@ func wsHandler(c *gin.Context) {
 		conn.Close()
 	}()
 
-	// Listen for commands (e.g. Reset)
 	for {
 		var cmd structs.WSCommand
 		if err := conn.ReadJSON(&cmd); err != nil {
 			break
 		}
-
 		if cmd.Action == "reset" {
 			variables.Policy.Lock()
 			variables.Policy.Data = make(map[string]map[string]bool)
 			emptyJSON := generateJSON()
 			variables.Policy.Unlock()
-
-			// Broadcast reset to everyone
-			broadcast(
-				structs.WSUpdate{
-					LogHTML:    "RESET_SIGNAL",
-					PolicyJSON: emptyJSON,
-				},
-			)
+			broadcast(structs.WSUpdate{LogHTML: "RESET_SIGNAL", PolicyJSON: emptyJSON})
 		}
 	}
 }

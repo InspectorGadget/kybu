@@ -1,120 +1,77 @@
-# Kybu (CLI)
+# Kybu: Zero-Touch AWS IAM Policy Generator
 
-## Overview
+**Kybu** is a lightweight, local CLI tool that generates production-ready IAM policies by listening to your actual AWS usage.
 
-"Fire a request. Catch the rebound. Forge the policy." Kybu is a specialized AWS IAM policy generator that builds permissions by listening to the "echo" of your failed requests.
+Instead of guessing which permissions you need, just run your commands and let Kybu "forge" a **Least Privilege** policy in real-time based on the forensic data it catches from AWS telemetry.
 
-Unlike standard tools that rely on static dictionary lookups, Kybu acts as a forensic detective. It listens to AWS Client Side Monitoring (CSM) telemetry and uses regex heuristics to scrape the exact missing Action and Resource ARN directly from AWS AccessDenied error messages.
+![Kybu](videos/kybu.gif)
 
-Say hello to Kybu, your new best friend for crafting precise IAM policies!
+## Key Features
 
-## Features
-
-1. **Real-Time Policy Forging**: Instantly converts live AWS AccessDenied errors into valid IAM JSON statements, turning your failed requests into actionable permissions.
-2. **Forensic Error Analysis**: Uses advanced regex heuristics to scrape hidden IAM actions (like kms:GenerateDataKey) and specific Resource ARNs directly from exception messages, bypassing the limitations of standard telemetry.
-3. **Zero-Touch Telemetry**: Listens to the native AWS Client Side Monitoring (CSM) stream over UDP. No complex HTTP proxies, no SSL certificates, and no latency overhead.
-4. **Live Action Dashboard**: Features a dark-mode, real-time web UI that groups permissions by service, highlights denied requests instantly, and includes one-click policy copying and stream management.
-
----
-
-## Installation
-
-Kybu is distributed as a single binary with no dependencies.
-
-1. Download the latest release from the [GitHub Releases](https://github.com/InspectorGadget/kybu/releases) page.
-2. Make the binary executable:
-   ```bash
-   chmod +x kybu
-   ```
-3. Run the binary:
-   ```bash
-   ./kybu
-   ```
-   **OR**
-   ```bash
-   ./kybu --web-port 8080
-   ```
+- **Zero-Touch Configuration:** Automatically injects `csm_enabled = true` into your `~/.aws/config` on startup and removes it gracefully on exit. No manual file editing required.
+- **Forensic Resource Scraper:** Goes beyond standard telemetry. Kybu scrapes raw AWS error messages to find specific Resource ARNs (S3 buckets, DynamoDB tables, KMS keys) for true **Principle of Least Privilege (PoLP)**.
+- **Live Web Dashboard:** A sleek, dark-mode interface built with WebSockets. Watch your policy grow and your logs stream in real-time.
+- **Smart S3 Suffixing:** Automatically detects if a permission needs a bucket-level ARN (`arn:aws:s3:::bucket`) or an object-level ARN (`arn:aws:s3:::bucket/*`).
+- **Universal Compatibility:** Works with the AWS CLI, AWS SDKs (Go, Python, JS, etc.), and any tool that supports AWS Client Side Monitoring.
+- **Universal Compatibility:** Works with the AWS CLI, AWS SDKs, and any tool that supports AWS Client Side Monitoring (CSM).
 
 ---
 
-## Usage & Flags
+## Installation & Setup
 
-By default, the web dashboard runs on port `8080` and the UDP listener on port `31000`. You can customize these settings using the following flags:
+### Download Pre-built Binaries (Recommended)
 
-- `--web-port`: Specify a custom port for the web dashboard (default: `8080`). The dashboard can be accessed at `http://localhost:<web-port>`.
+The fastest way to get started is to download the latest version for your operating system (Windows, macOS, or Linux) from our **[Releases Page](https://github.com/InspectorGadget/kybu/releases)**.
+
+### Moving Kybu to your PATH
+
+To run kybu from any directory without typing the full path, move the binary to a system folder.
+
+- **macOS/Linux:**
+
+1. `sudo mv kybu /usr/local/bin/`
+
+- **Windows:**
+
+1. Move `kybu.exe` to a folder of your choice (e.g., `C:\Tools\`).
+2. Add that folder to your system's PATH environment variable.
 
 ---
 
-## Workflow
+## Usage
 
-Kybu is designed to seamlessly integrate into your existing AWS SDK workflows. Here's how to get started:
-
-1. **Enable CSM**: Ensure that AWS Client Side Monitoring (CSM) is enabled globally in your AWS SDK configuration. Kybu will automatically toggle this setting for you on startup.
-2. **Run Kybu**: Start the Kybu binary. It will listen
-   for CSM telemetry on UDP port `31000` by default.
-3. **Trigger AccessDenied Errors**: Use your application as usual. When an AWS SDK call fails due to insufficient permissions, Kybu will capture the AccessDenied error messages from the CSM telemetry.
-4. **View the Dashboard**: Open your web browser and navigate to `http://localhost:<web-port>` to access the Kybu dashboard. Here, you can view the forged IAM policies in real-time, grouped by service.
-
-### Step 1: Enable CSM Globally
-
-Note: This automatically injects csm_enabled = true into your AWS config file.
+1. Start Kybu: Once running, open your browser to http://localhost:8080.
+2. Generate Traffic: Open a new terminal window and run the AWS commands you want to capture permissions for:
 
 ```bash
-./kybu
-CSM Enabled globally in '~/.aws/config'
+aws s3 ls s3://my-app-bucket
+aws dynamodb describe-table --table-name UsersTable
 ```
 
-### Step 2: Access the Dashboard
-
-Open your web browser and navigate to:
-
-```
-http://localhost:8080
-```
-
-Note: Please keep Kybu running in the background and the Dashboard open in your browser to continue capturing telemetry in real-time.
-
-### Step 3: Generate Traffic
-
-In a new terminal window, run your Terraform plan, AWS CLI command, or Python script. Do not set any CSM environment variables manually; Kybu has already handled this globally.
-
-Example:
-
-```bash
-aws s3 ls s3://my-private-bucket
-```
-
-### Step 3: View Forged Policies
-
-As your application runs and encounters AccessDenied errors, Kybu will capture the relevant telemetry and display the forged IAM policies in the dashboard. You can copy these policies directly from the UI for use in your IAM roles or policies.
-
-You will see:
-
-1. Red Log Entries: The specific failed calls.
-2. Forged IAM Statements: The exact Action and Resource ARN needed to resolve the AccessDenied errors.
-3. Grouped by Service: Permissions are organized by AWS service for easy navigation.
-4. One-Click Copy: Easily copy the generated IAM policies for immediate use.
+3. Refine in Real-Time: Watch the dashboard as it logs all requests, extracts the exact resources, and builds the JSON.
+4. Copy & Paste: Once finished, copy the generated JSON from the "Policy Output" window and paste it directly into the AWS IAM Console.
 
 ---
 
-## Stopping Kybu
+## Configuration Flags
 
-When you are finished, simply press Ctrl+C in the terminal running Kybu. <br>
-**Note**: Kybu will automatically remove the `csm_enabled = true` line from your `~/.aws/config` file to return your system to its original state.
-
-```bash
-Shutting down... Removing CSM flags.
-```
+- `--web-port`: The port where the dashboard will be hosted. (Default: 8080)
 
 ---
 
-## Troubleshooting
+## Security & Privacy
 
-- **My logs are empty**:
-  - Ensure that your AWS SDK calls are indeed failing with AccessDenied errors. Kybu only captures telemetry related to failed requests.
-  - Verify that CSM is enabled in your AWS SDK configuration. Kybu should have done this automatically, but double-check your ~/.aws/config file.
-- **I see "Access Denied" in my terminal, but Kybu didn't catch it.**:
-  - Some AWS services do not emit CSM telemetry for every failure type. But Kybu captures the vast majority of common services.
-  - Ensure the tool is running before you execute the failing command.
-- **The policy disappeared when I refreshed!**:
-  - As of the latest version, Kybu holds the policy state in the backend memory. Your policy will survive a browser refresh. Use the "Clear Stream" button in the UI to reset the state.
+1. 100% Local: Kybu runs entirely on your machine. No AWS credentials, telemetry, or metadata are ever sent to external servers or third parties.
+2. Automatic Cleanup: Kybu is a good citizen. When you hit Ctrl+C or Command+C, it immediately restores your `~/.aws/config` to its original state, disabling CSM telemetry.
+3. PoLP Focus: Unlike other generators that default to Resource: "\*", Kybu's heuristic engine prioritizes specific ARNs to keep your cloud environment secure. Kybu will try its best to find the exact resource, but if it can't, it will fall back to a wildcard. Always review the generated policy before applying it.
+
+---
+
+## Contributing
+
+We welcome contributions!
+
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your changes.
+4. Push to the branch and open a Pull Request.

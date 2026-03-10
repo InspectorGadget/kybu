@@ -1,30 +1,46 @@
 package structs
 
-import "sync"
+import (
+	"sync"
 
-// Raw Telemetry from AWS SDK
+	"github.com/gorilla/websocket"
+)
+
+// CSMPacket represents the telemetry data sent by the AWS SDK
 type CSMPacket struct {
 	Service             string `json:"Service"`
 	Api                 string `json:"Api"`
-	ErrorCode           string `json:"ErrorCode"`
 	HttpStatusCode      int    `json:"HttpStatusCode"`
-	AwsExceptionMessage string `json:"AwsExceptionMessage"`
+	ErrorCode           string `json:"ErrorCode"`
+	ErrorMessage        string `json:"ErrorMessage"`
 	Message             string `json:"Message"`
+	AwsException        string `json:"AwsException"`
+	AwsExceptionMessage string `json:"AwsExceptionMessage"`
+	Region              string `json:"Region"`
+	UserAgent           string `json:"UserAgent"`
 }
 
-// Message sent TO the frontend
+// PolicyStore handles thread-safe storage of discovered permissions.
+type PolicyStore struct {
+	sync.RWMutex
+	Data map[string]map[string]bool
+}
+
+// WSUpdate is the payload sent to the web dashboard via WebSockets
 type WSUpdate struct {
 	LogHTML    string `json:"log_html"`
 	PolicyJSON string `json:"policy_json"`
 }
 
-// Incoming Message FROM the frontend
+// WSCommand represents instructions sent from the UI to the backend
 type WSCommand struct {
-	Action string `json:"action"` // e.g. "reset"
+	Action string `json:"action"`
 }
 
-// Internal State Store (Thread-Safe)
-type PolicyStore struct {
-	sync.RWMutex
-	Data map[string]map[string]bool // Action -> Set of Resources
+// Hub (Optional/Future) could manage multiple websocket clients
+type Hub struct {
+	Clients    map[*websocket.Conn]bool
+	Broadcast  chan WSUpdate
+	Register   chan *websocket.Conn
+	Unregister chan *websocket.Conn
 }

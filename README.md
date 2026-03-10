@@ -26,21 +26,23 @@ The fastest way to get started is to download the latest version for your operat
 
 To run kybu from any directory without typing the full path, move the binary to a system folder.
 
-- **macOS/Linux:**
+**macOS/Linux:**
+Rename and move the binary to your executable path:
 
-1. Rename and move the binary to your executable path:
+```bash
+# Example for Intel Mac. Change filename to match your download.
+sudo mv kybu-darwin-amd64 /usr/local/bin/kybu
+```
 
-   ```bash
-   # Example for Intel Mac. Change filename to match your download.
-   sudo mv kybu-darwin-amd64 /usr/local/bin/kybu
-   ```
+Make it executable:
 
-2. Make it executable:
-   ```bash
-    sudo chmod +x /usr/local/bin/kybu
-   ```
+```bash
+sudo chmod +x /usr/local/bin/kybu
+```
 
-- **Windows:**
+--
+
+**Windows:**
 
 1. Rename the downloaded file (e.g., `kybu-windows-amd64.exe`) to simply `kybu.exe`.
 2. Move it to a folder (e.g., `C:\Tools\`).

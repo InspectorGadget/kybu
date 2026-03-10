@@ -13,7 +13,6 @@ Instead of guessing which permissions you need, just run your commands and let K
 - **Live Web Dashboard:** A sleek, dark-mode interface built with WebSockets. Watch your policy grow and your logs stream in real-time.
 - **Smart S3 Suffixing:** Automatically detects if a permission needs a bucket-level ARN (`arn:aws:s3:::bucket`) or an object-level ARN (`arn:aws:s3:::bucket/*`).
 - **Universal Compatibility:** Works with the AWS CLI, AWS SDKs (Go, Python, JS, etc.), and any tool that supports AWS Client Side Monitoring.
-- **Universal Compatibility:** Works with the AWS CLI, AWS SDKs, and any tool that supports AWS Client Side Monitoring (CSM).
 
 ---
 
@@ -29,14 +28,43 @@ To run kybu from any directory without typing the full path, move the binary to 
 
 - **macOS/Linux:**
 
-1. `sudo mv kybu /usr/local/bin/`
+1. Rename and move the binary to your executable path:
+
+   ```bash
+   # Example for Intel Mac. Change filename to match your download.
+   sudo mv kybu-darwin-amd64 /usr/local/bin/kybu
+   ```
+
+2. Make it executable:
+   ```bash
+    sudo chmod +x /usr/local/bin/kybu
+   ```
 
 - **Windows:**
 
-1. Move `kybu.exe` to a folder of your choice (e.g., `C:\Tools\`).
-2. Add that folder to your system's PATH environment variable.
+1. Rename the downloaded file (e.g., `kybu-windows-amd64.exe`) to simply `kybu.exe`.
+2. Move it to a folder (e.g., `C:\Tools\`).
+3. Add `C:\Tools\` to your system's **PATH** environment variable.
 
 ---
+
+## How to Run
+
+1. Open a terminal and run (If in PATH):
+
+```bash
+kybu
+```
+
+2. If Kybu is in your current directory, you can run it with:
+
+```bash
+# On macOS/Linux
+./kybu-darwin-arm64
+
+# On Windows
+kybu-windows-amd64.exe
+```
 
 ## Usage
 
@@ -62,7 +90,7 @@ aws dynamodb describe-table --table-name UsersTable
 ## Security & Privacy
 
 1. 100% Local: Kybu runs entirely on your machine. No AWS credentials, telemetry, or metadata are ever sent to external servers or third parties.
-2. Automatic Cleanup: Kybu is a good citizen. When you hit Ctrl+C or Command+C, it immediately restores your `~/.aws/config` to its original state, disabling CSM telemetry.
+2. Automatic Cleanup: Kybu is a good citizen. When you hit Ctrl+C or Control+C, it immediately restores your `~/.aws/config` to its original state, disabling CSM telemetry.
 3. PoLP Focus: Unlike other generators that default to Resource: "\*", Kybu's heuristic engine prioritizes specific ARNs to keep your cloud environment secure. Kybu will try its best to find the exact resource, but if it can't, it will fall back to a wildcard. Always review the generated policy before applying it.
 
 ---

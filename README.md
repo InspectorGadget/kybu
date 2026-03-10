@@ -22,19 +22,22 @@ Instead of guessing which permissions you need, just run your commands and let K
 
 The fastest way to get started is to download the latest version for your operating system (Windows, macOS, or Linux) from our **[Releases Page](https://github.com/InspectorGadget/kybu/releases)**.
 
+---
+
 ### Moving Kybu to your PATH
 
 To run kybu from any directory without typing the full path, move the binary to a system folder.
 
 **macOS/Linux:**
-Rename and move the binary to your executable path:
+
+1. Rename and move the binary to your executable path:
 
 ```bash
 # Example for Intel Mac. Change filename to match your download.
 sudo mv kybu-darwin-amd64 /usr/local/bin/kybu
 ```
 
-Make it executable:
+2. Make it executable:
 
 ```bash
 sudo chmod +x /usr/local/bin/kybu

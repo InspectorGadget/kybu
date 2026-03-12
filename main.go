@@ -36,7 +36,7 @@ func main() {
 
 	// 2. Pre-flight Port Check (Fail before touching AWS config)
 	if err := network.CheckPortAvailability(*portPtr); err != nil {
-		fmt.Printf("❌ Error: Port %s is already in use.\n", *portPtr)
+		fmt.Printf("Error: Port %s is already in use.\n", *portPtr)
 		fmt.Println("Please stop the process using that port or try: kybu --web-port 9090")
 		return
 	}
@@ -71,21 +71,21 @@ func main() {
 
 	go func() {
 		if err := r.Run(":" + *portPtr); err != nil {
-			fmt.Printf("❌ Web Server failed: %v\n", err)
+			fmt.Printf("Web Server failed: %v\n", err)
 			p, _ := os.FindProcess(os.Getpid())
 			p.Signal(os.Interrupt)
 		}
 	}()
 
 	// 6. Verify and Announce
-	fmt.Printf("⏳ Waiting for Kybu dashboard to initialize on port %s...\n", *portPtr)
+	fmt.Printf("Waiting for Kybu dashboard to initialize on port %s...\n", *portPtr)
 	time.Sleep(500 * time.Millisecond) // Give Gin a split second to bind
 
 	if network.VerifyServerIsUp(*portPtr) {
-		fmt.Printf("🚀 Dashboard is LIVE at http://localhost:%s\n", *portPtr)
-		fmt.Println("🛰️  Listening for AWS telemetry (Ctrl+C to stop)...")
+		fmt.Printf("Dashboard is LIVE at http://localhost:%s\n", *portPtr)
+		fmt.Println("Listening for AWS telemetry (Ctrl+C to stop)...")
 	} else {
-		fmt.Println("⚠️  Warning: Dashboard unreachable. Triggering cleanup.")
+		fmt.Println("  Warning: Dashboard unreachable. Triggering cleanup.")
 		p, _ := os.FindProcess(os.Getpid())
 		p.Signal(os.Interrupt)
 	}

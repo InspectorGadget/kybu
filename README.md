@@ -50,14 +50,30 @@ Go to the **[Releases page](https://github.com/InspectorGadget/kybu/releases)** 
 
 ### Step 2 — Install it (so you can run it from anywhere)
 
-**macOS / Linux:**
+#### **Option A: Homebrew (Recommended for macOS)**
 
-Open your terminal and run these two commands (adjust the filename to match what you downloaded):
+The easiest way to install Kybu on macOS. This builds the tool from source on your machine, which **automatically bypasses macOS security warnings.**
 
 ```bash
-# Replace the filename below with whichever file you downloaded
-sudo mv kybu-darwin-arm64 /usr/local/bin/kybu
-sudo chmod +x /usr/local/bin/kybu
+# 1. Add our tap
+brew tap InspectorGadget/tap
+
+# 2. Install Kybu
+brew install kybu
+
+# 3. (Optional) To update in the future:
+brew update
+brew upgrade kybu
+```
+
+#### **Option B: Manual Install (MacOS/Linux)**
+
+1. Open your terminal and navigate to the folder where you downloaded the file.
+2. Run the following commands (replace `kybu-darwin-arm64` with your actual filename):
+
+```bash
+mv kybu-darwin-arm64 /usr/local/bin/kybu
+chmod +x /usr/local/bin/kybu
 ```
 
 > **What does this do?** `mv` renames the file to `kybu` and moves it to a folder your terminal already knows about. `chmod +x` makes it executable. After this, you can type `kybu` from any folder.

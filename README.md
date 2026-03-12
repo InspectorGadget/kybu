@@ -148,6 +148,7 @@ You can customize Kybu with the following flags:
 | Flag         | Default | Description                           |
 | ------------ | ------- | ------------------------------------- |
 | `--web-port` | `8080`  | Change the port the dashboard runs on |
+| `--version`  | N/A     | Show the current version of Kybu      |
 
 **Example:**
 

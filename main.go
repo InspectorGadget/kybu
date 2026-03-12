@@ -83,7 +83,8 @@ func main() {
 	} else {
 		fmt.Println("⚠️  Warning: Dashboard seems unreachable. Check your firewall settings.")
 		// Self trigger cleanup and exit
-		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+		p, _ := os.FindProcess(os.Getpid())
+		p.Signal(os.Interrupt)
 	}
 }
 

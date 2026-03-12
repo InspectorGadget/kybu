@@ -66,6 +66,8 @@ brew update
 brew upgrade kybu
 ```
 
+--
+
 #### **Option B: Manual Install (MacOS/Linux)**
 
 **MacOS/Linux:**

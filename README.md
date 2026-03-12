@@ -68,6 +68,8 @@ brew upgrade kybu
 
 #### **Option B: Manual Install (MacOS/Linux)**
 
+**MacOS/Linux:**
+
 1. Open your terminal and navigate to the folder where you downloaded the file.
 2. Run the following commands (replace `kybu-darwin-arm64` with your actual filename):
 

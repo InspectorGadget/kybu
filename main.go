@@ -28,64 +28,73 @@ func main() {
 	versionPtr := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
-	// Check if the specified port is available
-	if err := network.CheckPortAvailability(*portPtr); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
-	}
-
+	// 1. Version Check
 	if *versionPtr {
 		fmt.Printf("Kybu %s\n", variables.Version)
 		return
 	}
 
-	// 1. Enable CSM Globally on Startup
+	// 2. Pre-flight Port Check (Fail before touching AWS config)
+	if err := network.CheckPortAvailability(*portPtr); err != nil {
+		fmt.Printf("❌ Error: Port %s is already in use.\n", *portPtr)
+		fmt.Println("Please stop the process using that port or try: kybu --web-port 9090")
+		return
+	}
+
+	// 3. Enable CSM Globally
 	if err := config.ToggleCSM(true); err != nil {
 		fmt.Printf("Could not update config: %v\n", err)
 	} else {
-		fmt.Println("Kybu: CSM Enabled globally in '~/.aws/config'")
+		fmt.Println("🛰️  Kybu: CSM Enabled globally in '~/.aws/config'")
 	}
 
-	// 2. Ensure Cleanup on Exit (Ctrl+C)
+	// 4. Setup Cleanup Listener (Platform Agnostic)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Println("\nShutting down... Restoring AWS config.")
+		fmt.Println("\n   Restoring AWS config...")
 		config.ToggleCSM(false)
 		os.Exit(0)
 	}()
 
-	// Start Background Workers
-	go udpListener()
-	go packetProcessor()
-
+	// 5. Initialize Web Server in Background
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.SetTrustedProxies(nil)
 
-	r.GET(
-		"/",
-		func(c *gin.Context) {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(constants.HTML))
-		},
-	)
+	r.GET("/", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(constants.HTML))
+	})
 	r.GET("/ws", wsHandler)
 
-	// Run the web server for Dashboard
-	r.Run(":" + *portPtr)
+	go func() {
+		if err := r.Run(":" + *portPtr); err != nil {
+			fmt.Printf("❌ Web Server failed: %v\n", err)
+			p, _ := os.FindProcess(os.Getpid())
+			p.Signal(os.Interrupt)
+		}
+	}()
 
+	// 6. Verify and Announce
 	fmt.Printf("⏳ Waiting for Kybu dashboard to initialize on port %s...\n", *portPtr)
+	time.Sleep(500 * time.Millisecond) // Give Gin a split second to bind
+
 	if network.VerifyServerIsUp(*portPtr) {
 		fmt.Printf("🚀 Dashboard is LIVE at http://localhost:%s\n", *portPtr)
-		fmt.Println("🛰️  Listening for AWS telemetry...")
+		fmt.Println("🛰️  Listening for AWS telemetry (Ctrl+C to stop)...")
 	} else {
-		fmt.Println("⚠️  Warning: Dashboard seems unreachable. Check your firewall settings.")
-		// Self trigger cleanup and exit
+		fmt.Println("⚠️  Warning: Dashboard unreachable. Triggering cleanup.")
 		p, _ := os.FindProcess(os.Getpid())
 		p.Signal(os.Interrupt)
 	}
+
+	// 7. Start Background Workers
+	go udpListener()
+
+	// 8. Block on Packet Processor (Keeps main alive)
+	packetProcessor()
 }
 
 // packetProcessor handles the forensic scraping and state updates
@@ -121,11 +130,10 @@ func packetProcessor() {
 				eventResources = append(eventResources, fmt.Sprintf("arn:aws:dynamodb:%s:*:table/%s", region, match[1]))
 			}
 
-			// S3 Improved (Skip "specified", "the", etc.)
+			// S3 Improved
 			reS3 := regexp.MustCompile(`(?:s3://|bucket\s+)([a-zA-Z0-9.-]+)`)
 			if match := reS3.FindStringSubmatch(fullMsg); len(match) > 1 {
 				candidate := strings.Trim(match[1], ".")
-				// Filter out common error message noise
 				noise := map[string]bool{"specified": true, "the": true, "does": true, "not": true}
 				if !noise[strings.ToLower(candidate)] {
 					eventResources = append(eventResources, fmt.Sprintf("arn:aws:s3:::%s", candidate))
@@ -139,11 +147,9 @@ func packetProcessor() {
 			variables.Policy.Data[iamAction] = make(map[string]bool)
 		}
 
-		// If we found a real resource, delete the wildcard for this action
 		if len(eventResources) > 0 {
 			delete(variables.Policy.Data[iamAction], "*")
 		} else if len(variables.Policy.Data[iamAction]) == 0 {
-			// Only add wildcard if we have NO specific resources yet
 			eventResources = append(eventResources, "*")
 		}
 
@@ -169,7 +175,6 @@ func packetProcessor() {
 	}
 }
 
-// isIdentityArn returns true if the ARN belongs to an IAM principal rather than a resource
 func isIdentityArn(arn string) bool {
 	identityMarkers := []string{":iam::", ":sts::", ":user/", ":role/", "assumed-role/"}
 	for _, marker := range identityMarkers {
@@ -185,7 +190,6 @@ func applyServiceRules(action string, arn string) string {
 		return arn
 	}
 
-	// List of actions that apply to objects (require /*)
 	objectActions := []string{"GetObject", "PutObject", "DeleteObject", "AbortMultipartUpload"}
 	isObjectAction := false
 	for _, oa := range objectActions {
@@ -195,12 +199,10 @@ func applyServiceRules(action string, arn string) string {
 		}
 	}
 
-	// If it's an object action but looks like a bucket ARN, add /*
 	if isObjectAction && !strings.Contains(arn, "/") {
 		return strings.TrimSuffix(arn, "/") + "/*"
 	}
 
-	// For bucket-level actions (like ListBucket), ensure we DON'T have a / or /*
 	bucketActions := []string{"ListBucket", "GetBucketLocation"}
 	for _, ba := range bucketActions {
 		if strings.Contains(action, ba) {

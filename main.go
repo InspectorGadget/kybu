@@ -45,7 +45,7 @@ func main() {
 	if err := config.ToggleCSM(true); err != nil {
 		fmt.Printf("Could not update config: %v\n", err)
 	} else {
-		fmt.Println("🛰️  Kybu: CSM Enabled globally in '~/.aws/config'")
+		fmt.Println("Kybu: CSM Enabled globally in '~/.aws/config'")
 	}
 
 	// 4. Setup Cleanup Listener (Platform Agnostic)

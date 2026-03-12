@@ -24,7 +24,13 @@ import (
 
 func main() {
 	portPtr := flag.String("web-port", "8080", "Port for the web dashboard")
+	versionPtr := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *versionPtr {
+		fmt.Printf("Kybu %s\n", variables.Version)
+		return
+	}
 
 	// 1. Enable CSM Globally on Startup
 	if err := config.ToggleCSM(true); err != nil {

@@ -10,7 +10,8 @@ import (
 )
 
 var (
-	Policy = structs.PolicyStore{
+	Version = "0.0.1"
+	Policy  = structs.PolicyStore{
 		Data: make(map[string]map[string]bool),
 	}
 	Upgrader = websocket.Upgrader{

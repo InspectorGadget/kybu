@@ -17,6 +17,7 @@ import (
 
 	"github.com/InspectorGadget/kybu/config"
 	"github.com/InspectorGadget/kybu/constants"
+	"github.com/InspectorGadget/kybu/network"
 	"github.com/InspectorGadget/kybu/structs"
 	"github.com/InspectorGadget/kybu/variables"
 	"github.com/gin-gonic/gin"
@@ -26,6 +27,12 @@ func main() {
 	portPtr := flag.String("web-port", "8080", "Port for the web dashboard")
 	versionPtr := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	// Check if the specified port is available
+	if err := network.CheckPortAvailability(*portPtr); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
 
 	if *versionPtr {
 		fmt.Printf("Kybu %s\n", variables.Version)
@@ -66,8 +73,18 @@ func main() {
 	)
 	r.GET("/ws", wsHandler)
 
-	fmt.Printf("Kybu Dashboard running at http://localhost:%s\n", *portPtr)
+	// Run the web server for Dashboard
 	r.Run(":" + *portPtr)
+
+	fmt.Printf("⏳ Waiting for Kybu dashboard to initialize on port %s...\n", *portPtr)
+	if network.VerifyServerIsUp(*portPtr) {
+		fmt.Printf("🚀 Dashboard is LIVE at http://localhost:%s\n", *portPtr)
+		fmt.Println("🛰️  Listening for AWS telemetry...")
+	} else {
+		fmt.Println("⚠️  Warning: Dashboard seems unreachable. Check your firewall settings.")
+		// Self trigger cleanup and exit
+		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	}
 }
 
 // packetProcessor handles the forensic scraping and state updates
@@ -121,7 +138,6 @@ func packetProcessor() {
 			variables.Policy.Data[iamAction] = make(map[string]bool)
 		}
 
-		// --- THE CRITICAL FIX: The Purge ---
 		// If we found a real resource, delete the wildcard for this action
 		if len(eventResources) > 0 {
 			delete(variables.Policy.Data[iamAction], "*")

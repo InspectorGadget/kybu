@@ -1,110 +1,177 @@
-# Kybu: Zero-Touch AWS IAM Policy Generator
+# Kybu — Zero-Touch AWS IAM Policy Generator
 
-**Kybu** is a lightweight, local CLI tool that generates production-ready IAM policies by listening to your actual AWS usage.
+> **New to AWS or IAM?** No problem. This guide walks you through everything step by step.
 
-Instead of guessing which permissions you need, just run your commands and let Kybu "forge" a **Least Privilege** policy in real-time based on the forensic data it catches from AWS telemetry.
-
-![Kybu](videos/kybu.gif)
-
-## Key Features
-
-- **Zero-Touch Configuration:** Automatically injects `csm_enabled = true` into your `~/.aws/config` on startup and removes it gracefully on exit. No manual file editing required.
-- **Forensic Resource Scraper:** Goes beyond standard telemetry. Kybu scrapes raw AWS error messages to find specific Resource ARNs (S3 buckets, DynamoDB tables, KMS keys) for true **Principle of Least Privilege (PoLP)**.
-- **Live Web Dashboard:** A sleek, dark-mode interface built with WebSockets. Watch your policy grow and your logs stream in real-time.
-- **Smart S3 Suffixing:** Automatically detects if a permission needs a bucket-level ARN (`arn:aws:s3:::bucket`) or an object-level ARN (`arn:aws:s3:::bucket/*`).
-- **Universal Compatibility:** Works with the AWS CLI, AWS SDKs (Go, Python, JS, etc.), and any tool that supports AWS Client Side Monitoring.
+Kybu is a small tool that runs on your computer and **watches your AWS commands in real-time** — then automatically builds a secure IAM policy based on exactly what you used. No guessing, no copy-pasting from Stack Overflow.
 
 ---
 
-## Installation & Setup
+## What problem does this solve?
 
-### Download Pre-built Binaries (Recommended)
+When working with AWS, you need an **IAM policy** to control what actions are allowed. Most people either:
 
-The fastest way to get started is to download the latest version for your operating system (Windows, macOS, or Linux) from our **[Releases Page](https://github.com/InspectorGadget/kybu/releases)**.
+- Grant way too many permissions (a security risk), or
+- Spend hours manually figuring out the exact permissions needed
+
+**Kybu fixes this.** Just run your AWS commands like you normally would, and Kybu builds the policy for you — automatically and securely.
 
 ---
 
-### Moving Kybu to your PATH
+## Features at a glance
 
-To run kybu from any directory without typing the full path, move the binary to a system folder.
+| Feature                        | What it means for you                                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| **Zero-Touch Setup**           | Kybu configures itself on start and cleans up when you exit. No manual file editing.                                     |
+| **Real-Time Dashboard**        | Open your browser to watch your policy being built live as you run commands.                                             |
+| **Least Privilege by default** | Kybu targets the _exact_ resources you used (specific S3 buckets, DynamoDB tables, etc.) instead of using `*` wildcards. |
+| **Works everywhere**           | Compatible with the AWS CLI, Python (boto3), JavaScript, Go SDKs, and more.                                              |
+| **100% Local**                 | Nothing leaves your machine. No accounts, no sign-ups, no telemetry to external servers.                                 |
 
-**macOS/Linux:**
+---
 
-1. Rename and move the binary to your executable path:
+## Installation
+
+### Step 1 — Download the binary
+
+Go to the **[Releases page](https://github.com/InspectorGadget/kybu/releases)** and download the file that matches your operating system:
+
+| Your OS                     | File to download         |
+| --------------------------- | ------------------------ |
+| macOS (Apple Silicon / M1+) | `kybu-darwin-arm64`      |
+| macOS (Intel)               | `kybu-darwin-amd64`      |
+| Linux (x86_64)              | `kybu-linux-amd64`       |
+| Linux (ARM)                 | `kybu-linux-arm64`       |
+| Windows (x86_64)            | `kybu-windows-amd64.exe` |
+| Windows (ARM)               | `kybu-windows-arm64.exe` |
+
+> **Not sure which to pick?** Most modern Macs use Apple Silicon (`arm64`). Most Windows/Linux PCs use `amd64`. If unsure, check: Apple menu → About This Mac (Mac) or Settings → System → About (Windows).
+
+---
+
+### Step 2 — Install it (so you can run it from anywhere)
+
+**macOS / Linux:**
+
+Open your terminal and run these two commands (adjust the filename to match what you downloaded):
 
 ```bash
-# Example for Intel Mac. Change filename to match your download.
-sudo mv kybu-darwin-amd64 /usr/local/bin/kybu
-```
-
-2. Make it executable:
-
-```bash
+# Replace the filename below with whichever file you downloaded
+sudo mv kybu-darwin-arm64 /usr/local/bin/kybu
 sudo chmod +x /usr/local/bin/kybu
 ```
 
---
+> **What does this do?** `mv` renames the file to `kybu` and moves it to a folder your terminal already knows about. `chmod +x` makes it executable. After this, you can type `kybu` from any folder.
 
 **Windows:**
 
-1. Rename the downloaded file (e.g., `kybu-windows-amd64.exe`) to simply `kybu.exe`.
-2. Move it to a folder (e.g., `C:\Tools\`).
-3. Add `C:\Tools\` to your system's **PATH** environment variable.
+1. Rename the downloaded file (e.g. `kybu-windows-amd64.exe`) to `kybu.exe`
+2. Move `kybu.exe` to a folder like `C:\Tools\`
+3. Add that folder to your **PATH** — [here's how](https://www.howtogeek.com/118594/how-to-edit-your-system-path-for-easy-command-line-access/)
 
 ---
 
-## How to Run
+## How to use Kybu
 
-1. Open a terminal and run (If in PATH):
+Kybu works by sitting in the background while you run your AWS commands. Here's the full flow:
+
+### Step 1 — Start Kybu
 
 ```bash
 kybu
 ```
 
-2. If Kybu is in your current directory, you can run it with:
+> If you haven't added it to your PATH yet, you can run it directly from the folder you downloaded it to:
+>
+> ```bash
+> # macOS/Linux (use your actual filename)
+> ./kybu-darwin-arm64
+>
+> # Windows
+> kybu-windows-amd64.exe
+> ```
 
-```bash
-# On macOS/Linux
-./kybu-darwin-arm64
+### Step 2 — Open the dashboard
 
-# On Windows
-kybu-windows-amd64.exe
+Once Kybu is running, open your browser and go to:
+
+```
+http://localhost:8080
 ```
 
-## Usage
+You'll see a live dashboard where your policy will appear.
 
-1. Start Kybu: Once running, open your browser to http://localhost:8080.
-2. Generate Traffic: Open a new terminal window and run the AWS commands you want to capture permissions for:
+### Step 3 — Run your AWS commands (in a new terminal window)
+
+Open a **second terminal window** and run your AWS commands as you normally would. For example:
 
 ```bash
 aws s3 ls s3://my-app-bucket
 aws dynamodb describe-table --table-name UsersTable
 ```
 
-3. Refine in Real-Time: Watch the dashboard as it logs all requests, extracts the exact resources, and builds the JSON.
-4. Copy & Paste: Once finished, copy the generated JSON from the "Policy Output" window and paste it directly into the AWS IAM Console.
+Watch the dashboard — it logs every request and builds your policy in real time.
+
+### Step 4 — Copy your policy
+
+Once you're done, copy the JSON from the **"Policy Output"** panel in the dashboard, and paste it into the [AWS IAM Console](https://console.aws.amazon.com/iam/).
+
+### Step 5 — Stop Kybu
+
+Press `Ctrl+C` in the terminal where Kybu is running. It will automatically restore your AWS config to its original state.
 
 ---
 
-## Configuration Flags
+## ⚙️ Options
 
-- `--web-port`: The port where the dashboard will be hosted. (Default: 8080)
+You can customize Kybu with the following flags:
+
+| Flag         | Default | Description                           |
+| ------------ | ------- | ------------------------------------- |
+| `--web-port` | `8080`  | Change the port the dashboard runs on |
+
+**Example:**
+
+```bash
+kybu --web-port 9090
+```
 
 ---
 
 ## Security & Privacy
 
-1. 100% Local: Kybu runs entirely on your machine. No AWS credentials, telemetry, or metadata are ever sent to external servers or third parties.
-2. Automatic Cleanup: Kybu is a good citizen. When you hit Ctrl+C or Control+C, it immediately restores your `~/.aws/config` to its original state, disabling CSM telemetry.
-3. PoLP Focus: Unlike other generators that default to Resource: "\*", Kybu's heuristic engine prioritizes specific ARNs to keep your cloud environment secure. Kybu will try its best to find the exact resource, but if it can't, it will fall back to a wildcard. Always review the generated policy before applying it.
+- **Nothing leaves your machine.** Kybu only reads local AWS telemetry — it never sends your credentials, command history, or generated policies anywhere.
+- **Automatic cleanup.** When you stop Kybu with `Ctrl+C`, it immediately restores your `~/.aws/config` to exactly how it was before.
+- **Always review before applying.** Kybu does its best to find specific resource ARNs, but if it can't determine the exact resource, it falls back to a wildcard (`*`). Always review the generated policy before applying it to a production environment.
+
+---
+
+## How it works (under the hood)
+
+Kybu uses a built-in AWS feature called **Client Side Monitoring (CSM)**, which lets the AWS SDK report API calls to a local listener. Kybu temporarily enables this in your `~/.aws/config`, captures the data, extracts resource ARNs from the raw responses, and assembles it all into a valid IAM policy JSON.
 
 ---
 
 ## Contributing
 
-We welcome contributions!
+Contributions are welcome!
 
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes.
-4. Push to the branch and open a Pull Request.
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes
+4. Push and open a Pull Request
+
+---
+
+## FAQ
+
+**Q: Do I need to be logged into AWS for this to work?**
+Yes. Kybu listens to your existing AWS CLI session. Make sure you're authenticated (`aws configure` or an active SSO session).
+
+**Q: Will this affect my existing AWS config permanently?**
+No. Kybu saves your original config and restores it on exit.
+
+**Q: What if I forget to stop Kybu properly?**
+You can manually remove the `csm_enabled = true` line from `~/.aws/config` if needed.
+
+**Q: Can I use this with AWS SSO / IAM Identity Center?**
+Yes, as long as your CLI session is active and configured, Kybu will capture the traffic.

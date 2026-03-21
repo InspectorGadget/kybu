@@ -2,8 +2,6 @@ package structs
 
 import (
 	"sync"
-
-	"github.com/gorilla/websocket"
 )
 
 // CSMPacket represents the telemetry data sent by the AWS SDK
@@ -18,6 +16,7 @@ type CSMPacket struct {
 	AwsExceptionMessage string `json:"AwsExceptionMessage"`
 	Region              string `json:"Region"`
 	UserAgent           string `json:"UserAgent"`
+	RawPacket           string `json:"-"`
 }
 
 // PolicyStore handles thread-safe storage of discovered permissions.
@@ -35,12 +34,4 @@ type WSUpdate struct {
 // WSCommand represents instructions sent from the UI to the backend
 type WSCommand struct {
 	Action string `json:"action"`
-}
-
-// Hub (Optional/Future) could manage multiple websocket clients
-type Hub struct {
-	Clients    map[*websocket.Conn]bool
-	Broadcast  chan WSUpdate
-	Register   chan *websocket.Conn
-	Unregister chan *websocket.Conn
 }

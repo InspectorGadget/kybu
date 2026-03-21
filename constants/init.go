@@ -59,8 +59,6 @@ const HTML = `
                 logs.innerHTML = "";
                 showToast("Backend State Cleared!");
             } else if (data.log_html) {
-                const isScrolledToBottom = logs.scrollHeight - logs.scrollTop === logs.clientHeight;
-                
                 const div = document.createElement('div');
                 div.innerHTML = data.log_html;
                 logs.prepend(div.firstChild);

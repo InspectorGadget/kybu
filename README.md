@@ -1,6 +1,6 @@
 # Kybu — Zero-Touch AWS IAM Policy Generator
 
-Kybu watches your AWS commands and automatically builds a least-privilege IAM policy from your actual usage. No guessing, no wildcards.
+Kybu watches your AWS commands and automatically builds a least-privilege IAM policy from your actual usage.
 
 ---
 
@@ -8,8 +8,33 @@ Kybu watches your AWS commands and automatically builds a least-privilege IAM po
 
 1. Kybu enables [Client Side Monitoring](https://docs.aws.amazon.com/sdkref/latest/guide/feature-csm.html) locally in `~/.aws/config`
 2. You run your AWS commands as normal
-3. Kybu captures every API call, scrapes the exact resource ARNs, and assembles a valid IAM policy
+3. Kybu captures AWS telemetry, infers IAM actions/resources, and assembles a valid IAM policy
 4. On exit (`Ctrl+C`), it restores your config to its original state
+
+## Project Layout
+
+- `main.go`: runtime wiring (flags, server startup, websocket lifecycle, packet processing loop)
+- `parser.go`: CSM/error payload parsing and resource extraction heuristics
+- `inference.go`: action inference and service-specific resource handling
+- `policy.go`: IAM policy statement generation
+
+## AWS CLI Structured Error Output Support
+
+AWS CLI v2.34.0+ can emit structured errors using the `aws: [ERROR]: {...}` envelope.
+Kybu now enables this output format automatically and uses it to improve policy generation:
+
+- Parses the structured JSON payload from CLI errors.
+- Extracts `context.arguments` (for example `s3://bucket/key`, `--table-name`, and `--bucket` flags).
+- Infers more precise IAM actions and resources when packet error text is sparse.
+- Falls back to recent shell history for `s3:ListBucket` bucket inference when CSM packets omit bucket identity.
+
+This is especially useful for commands like:
+
+```bash
+aws s3 ls
+aws s3 ls s3://my-bucket/path
+aws dynamodb describe-table --table-name Users
+```
 
 ---
 
@@ -55,6 +80,12 @@ Download `kybu-windows-amd64.exe` or `kybu-windows-arm64.exe`, rename it to `kyb
 kybu
 ```
 
+For packet-level troubleshooting:
+
+```bash
+kybu --debug-csm
+```
+
 **Browser** — open the live dashboard:
 
 ```
@@ -74,10 +105,28 @@ Watch the dashboard build your policy in real time. When done, copy the JSON fro
 
 ## Options
 
-| Flag         | Default | Description            |
-| ------------ | ------- | ---------------------- |
-| `--web-port` | `8080`  | Port for the dashboard |
-| `--version`  | —       | Show current version   |
+| Flag          | Default | Description                                         |
+| ------------- | ------- | --------------------------------------------------- |
+| `--web-port`  | `8080`  | Port for the dashboard                              |
+| `--version`   | —       | Show current version                                |
+| `--debug-csm` | `false` | Show raw CSM packet diagnostics in dashboard stream |
+
+## Debugging
+
+When `--debug-csm` is enabled, the stream includes a `[DEBUG CSM]` block for each packet with:
+
+- Raw CSM packet payload
+- Parsed snippets
+- Extracted CLI arguments (if present)
+- Inferred IAM action and resources
+- Wildcard suppression and policy update status
+
+Kybu can infer S3 bucket resources from multiple sources (CSM fields, raw packet hints, and CLI command history) when packets are sparse.
+
+Important behavior note:
+
+- Some AWS CLI commands (especially for dotted bucket names) may produce CSM packets without an explicit bucket field.
+- In those cases, Kybu may infer the bucket from FQDN/path hints or recent shell history to avoid over-broad wildcard resources.
 
 ---
 

@@ -36,6 +36,9 @@ func ToggleCSM(enable bool) error {
 		if strings.HasPrefix(trimmed, "csm_enabled") {
 			continue
 		}
+		if strings.HasPrefix(trimmed, "cli_error_format") {
+			continue
+		}
 
 		// 2. Keep the original line (headers, regions, output format, etc.)
 		output = append(output, line)
@@ -43,6 +46,7 @@ func ToggleCSM(enable bool) error {
 		// 3. Injection Logic
 		if enable && isProfileHeader {
 			output = append(output, "csm_enabled = true")
+			output = append(output, "cli_error_format = json")
 		}
 	}
 
